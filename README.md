@@ -17,7 +17,7 @@ Omarchy traditionally distributes one theme per Git repository. A collection aut
 Iromihon recognizes the native, manifest-free collection shape:
 
 ```text
-omarchy-chaos-themes/
+iromihon-themes/
   themes/
     xerox-riot/
       colors.toml
@@ -32,7 +32,7 @@ omarchy-chaos-themes/
 A direct child address appends its slug as a URL fragment:
 
 ```text
-https://github.com/RegionallyFamous/omarchy-chaos-themes.git#xerox-riot
+https://github.com/RegionallyFamous/iromihon-themes.git#xerox-riot
 ```
 
 The fragment is a selection hint for Iromihon. Git sees only the canonical base URL, so every installed child reuses one clone.
@@ -50,6 +50,12 @@ Open **Iromihon** from Apps, or summon it directly:
 
 ```bash
 omarchy-shell shell summon io.github.regionallyfamous.iromihon '{}'
+```
+
+Paste the companion collection URL to browse the four launch themes:
+
+```text
+https://github.com/RegionallyFamous/iromihon-themes.git
 ```
 
 ## Controls
