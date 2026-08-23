@@ -12,8 +12,8 @@ PLUGIN_DIR="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
 LAYER_NAMESPACE="iromihon"
 QMLLINT_BIN=$(command -v qmllint || true)
 : "${QMLLINT_BIN:=/usr/lib/qt6/bin/qmllint}"
-SOURCE_URL="https://github.com/RegionallyFamous/omarchy-chaos-themes.git"
-SOURCE_ID="omarchy-chaos-themes-$(printf '%s' "$SOURCE_URL" | sha256sum | cut -c1-12)"
+SOURCE_URL="https://github.com/RegionallyFamous/iromihon-themes.git"
+SOURCE_ID="iromihon-themes-$(printf '%s' "$SOURCE_URL" | sha256sum | cut -c1-12)"
 SOURCE_ORIGIN="$HOME/.cache/iromihon-acceptance-origin"
 SOURCE_PATH="$HOME/.local/share/omarchy/theme-sources/$SOURCE_ID"
 SOURCE_STATE="$HOME/.local/state/omarchy/theme-sources/$SOURCE_ID"
@@ -119,12 +119,15 @@ wait_until "Iromihon adds its Apps launcher" 15 test -f "$LAUNCHER"
 
 launch_app "gtk-launch '$PLUGIN_ID'"
 wait_until "Iromihon opens from Apps" 20 layer_on_screen "$LAYER_NAMESPACE"
-wait_until "the Apps launcher opens source entry" 20 screen_contains "One repository"
-screenshot "success-iromihon-00-apps-entry"
+wait_until "a fresh install opens the built-in collection" 20 screen_contains "Cable Rat King"
+wait_until "the default collection is registered" 20 test -d "$SOURCE_STATE"
+wait_until "the default child is remembered" 20 \
+  bash -c "jq -e '.url == \"$SOURCE_URL\" and .slug == \"cable-rat-king\"' '$SELECTION_FILE'"
+screenshot "success-iromihon-00-default-collection"
 wtype -k Escape
 wait_until "Iromihon closes after the Apps launch" 20 layer_absent "$LAYER_NAMESPACE"
 
-payload=$(jq -cn '{url: "https://github.com/RegionallyFamous/omarchy-chaos-themes.git#xerox-riot"}')
+payload=$(jq -cn '{url: "https://github.com/RegionallyFamous/iromihon-themes.git#xerox-riot"}')
 omarchy-shell shell summon "$PLUGIN_ID" "$payload" >/dev/null
 wait_until "Iromihon opens through the shell" 20 layer_on_screen "$LAYER_NAMESPACE"
 wait_until "Iromihon brand is visible" 20 screen_contains "Iromihon"
@@ -178,13 +181,14 @@ screenshot "success-iromihon-06-detached"
 
 wtype -k g
 wait_until "another-source control returns to entry" 15 screen_contains "One repository"
-wait_until "another-source control forgets the saved selection" 15 test ! -e "$SELECTION_FILE"
+wait_until "another-source control stores an explicit empty preference" 15 \
+  bash -c "jq -e '.schemaVersion == 1 and .selection == null' '$SELECTION_FILE'"
 screenshot "success-iromihon-07-source-entry"
 wtype -k Escape
 wait_until "Escape closes Iromihon" 20 layer_absent "$LAYER_NAMESPACE"
 
 omarchy-restart-shell
-wait_until "the Omarchy shell restarts after forgetting the source" 20 omarchy-shell shell ping
+wait_until "the Omarchy shell restarts after changing the source" 20 omarchy-shell shell ping
 launch_app "gtk-launch '$PLUGIN_ID'"
 wait_until "Iromihon opens after the reset restart" 20 layer_on_screen "$LAYER_NAMESPACE"
 wait_until "Iromihon keeps the source entry after an explicit reset" 20 screen_contains "One repository"

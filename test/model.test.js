@@ -6,16 +6,16 @@ function sourcePayload(overrides = {}) {
   return JSON.stringify({
     schemaVersion: 1,
     source: {
-      id: 'omarchy-chaos-themes-a1b2c3d4e5f6',
-      url: 'https://github.com/RegionallyFamous/omarchy-chaos-themes.git',
-      path: '/home/test/.local/share/omarchy/theme-sources/omarchy-chaos-themes-a1b2c3d4e5f6',
+      id: 'iromihon-themes-a1b2c3d4e5f6',
+      url: 'https://github.com/RegionallyFamous/iromihon-themes.git',
+      path: '/home/test/.local/share/omarchy/theme-sources/iromihon-themes-a1b2c3d4e5f6',
       commit: 'a'.repeat(40)
     },
     themes: [{
       slug: 'xerox-riot',
       name: 'Xerox Riot',
-      path: '/home/test/.local/share/omarchy/theme-sources/omarchy-chaos-themes-a1b2c3d4e5f6/themes/xerox-riot',
-      preview: '/home/test/.local/share/omarchy/theme-sources/omarchy-chaos-themes-a1b2c3d4e5f6/themes/xerox-riot/preview.png',
+      path: '/home/test/.local/share/omarchy/theme-sources/iromihon-themes-a1b2c3d4e5f6/themes/xerox-riot',
+      preview: '/home/test/.local/share/omarchy/theme-sources/iromihon-themes-a1b2c3d4e5f6/themes/xerox-riot/preview.png',
       status: 'available',
       installed: false,
       conflict: false,
@@ -59,18 +59,23 @@ test('rejects malformed, oversized, and escaping source data', () => {
   assert.equal(Model.parseSourceJson(JSON.stringify(escaping)).ok, false)
 })
 
-test('restores an exact saved child and recognizes first launch', () => {
-  const firstLaunch = Model.parseRestoreJson(JSON.stringify({ schemaVersion: 1, selection: null }))
-  assert.deepEqual(firstLaunch, { ok: true, found: false, error: '' })
+test('restores an exact saved child and distinguishes first launch from source entry', () => {
+  const firstLaunch = Model.parseRestoreJson(JSON.stringify({ schemaVersion: 1, selection: null, useDefault: true }))
+  assert.deepEqual(firstLaunch, { ok: true, found: false, useDefault: true, error: '' })
+
+  const sourceEntry = Model.parseRestoreJson(JSON.stringify({ schemaVersion: 1, selection: null, useDefault: false }))
+  assert.deepEqual(sourceEntry, { ok: true, found: false, useDefault: false, error: '' })
+  assert.equal(Model.parseRestoreJson(JSON.stringify({ schemaVersion: 1, selection: null, useDefault: 'yes' })).ok, false)
 
   const restored = Model.parseRestoreJson(sourcePayload({
     selection: {
-      url: 'https://github.com/RegionallyFamous/omarchy-chaos-themes.git',
+      url: 'https://github.com/RegionallyFamous/iromihon-themes.git',
       slug: 'xerox-riot'
     }
   }))
   assert.equal(restored.ok, true)
   assert.equal(restored.found, true)
+  assert.equal(restored.useDefault, false)
   assert.equal(restored.slug, 'xerox-riot')
   assert.equal(restored.themes[0].slug, 'xerox-riot')
 })
@@ -83,7 +88,7 @@ test('rejects mismatched, absent, and oversized saved selections', () => {
 
   const absent = sourcePayload({
     selection: {
-      url: 'https://github.com/RegionallyFamous/omarchy-chaos-themes.git',
+      url: 'https://github.com/RegionallyFamous/iromihon-themes.git',
       slug: 'not-in-source'
     }
   })
@@ -91,7 +96,7 @@ test('rejects mismatched, absent, and oversized saved selections', () => {
 
   const valid = sourcePayload({
     selection: {
-      url: 'https://github.com/RegionallyFamous/omarchy-chaos-themes.git',
+      url: 'https://github.com/RegionallyFamous/iromihon-themes.git',
       slug: 'xerox-riot'
     }
   })

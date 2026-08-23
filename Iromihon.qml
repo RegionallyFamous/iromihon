@@ -38,6 +38,7 @@ Item {
   property int requestSerial: 0
 
   readonly property bool busy: phase === "loading" || phase === "working"
+  readonly property string defaultRepositoryUrl: "https://github.com/RegionallyFamous/iromihon-themes.git"
   readonly property var selectedTheme: themes.length > 0 && themeIndex >= 0 && themeIndex < themes.length ? themes[themeIndex] : null
   readonly property string focusedScreenName: Hyprland.focusedMonitor ? String(Hyprland.focusedMonitor.name || "") : ""
   readonly property string pluginDir: {
@@ -169,6 +170,11 @@ Item {
       return
     }
     if (!parsed.found) {
+      if (parsed.useDefault) {
+        repoDraft = defaultRepositoryUrl
+        inspectRepository(defaultRepositoryUrl)
+        return
+      }
       statusText = ""
       phase = "entry"
       Qt.callLater(function() { urlField.forceActiveFocus() })

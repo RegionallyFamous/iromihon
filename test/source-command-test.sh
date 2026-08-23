@@ -4,7 +4,7 @@ set -euo pipefail
 
 PLUGIN_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 COMMAND="$PLUGIN_ROOT/scripts/source-command"
-PUBLIC_URL="https://github.com/RegionallyFamous/omarchy-chaos-themes.git"
+PUBLIC_URL="https://github.com/RegionallyFamous/iromihon-themes.git"
 TEST_ROOT=$(mktemp -d)
 ORIGINAL_PATH="$PATH"
 IROMIHON_REAL_GIT=$(command -v git)
@@ -47,7 +47,7 @@ destination=""
 for index in "${!arguments[@]}"; do
   if [[ ${arguments[$index]} == "clone" ]]; then
     clone=true
-  elif [[ ${arguments[$index]} == "https://github.com/RegionallyFamous/omarchy-chaos-themes.git" ]]; then
+  elif [[ ${arguments[$index]} == "https://github.com/RegionallyFamous/iromihon-themes.git" ]]; then
     arguments[$index]="$IROMIHON_TEST_ORIGIN"
   fi
 done
@@ -65,7 +65,7 @@ if [[ $clone == "true" ]]; then
   fi
   destination="${arguments[${#arguments[@]} - 1]}"
   "$IROMIHON_REAL_GIT" "${arguments[@]}"
-  "$IROMIHON_REAL_GIT" -C "$destination" remote set-url origin "https://github.com/RegionallyFamous/omarchy-chaos-themes.git"
+  "$IROMIHON_REAL_GIT" -C "$destination" remote set-url origin "https://github.com/RegionallyFamous/iromihon-themes.git"
   exit 0
 fi
 
@@ -115,12 +115,12 @@ pass "inspect clones once and installs no children"
 
 selection_file="$XDG_STATE_HOME/omarchy/iromihon/selection.json"
 empty_restore=$("$COMMAND" restore --json)
-jq -e '.schemaVersion == 1 and .selection == null' <<<"$empty_restore" >/dev/null
+jq -e '.schemaVersion == 1 and .selection == null and .useDefault == true' <<<"$empty_restore" >/dev/null
 "$COMMAND" remember "$PUBLIC_URL" xerox-riot
 [[ -f $selection_file && ! -L $selection_file ]] || fail "selection is saved as a regular file"
 [[ $(stat -c '%a' "$selection_file") == "600" ]] || fail "selection state is not owner-only"
 restore_json=$("$COMMAND" restore --json)
-jq -e '.selection as $selection | $selection == {url: "https://github.com/RegionallyFamous/omarchy-chaos-themes.git", slug: "xerox-riot"} and any(.themes[]; .slug == $selection.slug)' <<<"$restore_json" >/dev/null
+jq -e '.selection as $selection | $selection == {url: "https://github.com/RegionallyFamous/iromihon-themes.git", slug: "xerox-riot"} and any(.themes[]; .slug == $selection.slug)' <<<"$restore_json" >/dev/null
 pass "the exact collection child survives a fresh process"
 
 multibyte_padding=$(printf 'é%.0s' {1..128})
@@ -156,9 +156,14 @@ fi
 [[ ! -s $TEST_ROOT/selection-symlink.out ]] || fail "symbolic-link selection state emits partial JSON"
 "$COMMAND" forget
 [[ -f $TEST_ROOT/selection-target.json ]] || fail "forget followed a symbolic-link selection target"
+[[ -f $selection_file && ! -L $selection_file ]] || fail "forget did not replace selection state with a regular marker"
+[[ $(stat -c '%a' "$selection_file") == "600" ]] || fail "empty selection state is not owner-only"
 empty_restore=$("$COMMAND" restore --json)
-jq -e '.selection == null' <<<"$empty_restore" >/dev/null
-pass "malformed state fails closed and explicit forget clears only Iromihon state"
+jq -e '.selection == null and .useDefault == false' <<<"$empty_restore" >/dev/null
+rm -f "$selection_file"
+empty_restore=$("$COMMAND" restore --json)
+jq -e '.selection == null and .useDefault == false' <<<"$empty_restore" >/dev/null
+pass "malformed state fails closed and explicit source entry survives upgrades"
 
 install_json=$("$COMMAND" install "$source_id" cable-rat-king --json)
 jq -e '.action == {type: "install", theme: "cable-rat-king", applied: false}' <<<"$install_json" >/dev/null

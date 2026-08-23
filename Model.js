@@ -131,7 +131,10 @@ function parseRestoreJson(rawText) {
   try { decoded = JSON.parse(raw) } catch (e) { return { ok: false, error: "Saved selection returned malformed data." } }
   if (!decoded || decoded.schemaVersion !== 1 || !("selection" in decoded))
     return { ok: false, error: "Saved selection response has an unsupported shape." }
-  if (decoded.selection === null) return { ok: true, found: false, error: "" }
+  if (("useDefault" in decoded) && typeof decoded.useDefault !== "boolean")
+    return { ok: false, error: "Saved selection response has an unsupported shape." }
+  if (decoded.selection === null)
+    return { ok: true, found: false, useDefault: decoded.useDefault === true, error: "" }
   if (!decoded.selection || typeof decoded.selection !== "object" || !isValidSlug(decoded.selection.slug))
     return { ok: false, error: "Saved selection identity is invalid." }
 
@@ -148,6 +151,7 @@ function parseRestoreJson(rawText) {
     source: source.source,
     themes: source.themes,
     slug: String(decoded.selection.slug),
+    useDefault: false,
     error: ""
   }
 }

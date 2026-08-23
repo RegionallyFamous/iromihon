@@ -193,17 +193,23 @@ embedded_update() {
 
 emit_empty_selection() {
   local output_json="$1"
+  local use_default="$2"
 
   if [[ $output_json == "true" ]]; then
-    jq -cn '{schemaVersion: 1, selection: null}'
+    jq -cn --argjson use_default "$use_default" \
+      '{schemaVersion: 1, selection: null, useDefault: $use_default}'
   else
-    printf 'No saved Iromihon selection.\n'
+    if [[ $use_default == "true" ]]; then
+      printf 'No saved Iromihon selection; use the default collection.\n'
+    else
+      printf 'No saved Iromihon selection.\n'
+    fi
   fi
 }
 
 embedded_restore() {
   local output_json=false
-  local selection_json repository_url theme_name selection_bytes
+  local selection_json repository_url theme_name selection_bytes use_default
 
   while (( $# > 0 )); do
     case "$1" in
@@ -215,13 +221,23 @@ embedded_restore() {
 
   lock_sources
   if [[ ! -e $IROMIHON_SELECTION_FILE && ! -L $IROMIHON_SELECTION_FILE ]]; then
-    emit_empty_selection "$output_json"
+    use_default=true
+    if [[ -e $IROMIHON_SELECTION_DIR || -L $IROMIHON_SELECTION_DIR ]]; then
+      [[ -d $IROMIHON_SELECTION_DIR && ! -L $IROMIHON_SELECTION_DIR ]] || fail "Selection state path is not a regular directory."
+      use_default=false
+    fi
+    emit_empty_selection "$output_json" "$use_default"
     return
   fi
   [[ -f $IROMIHON_SELECTION_FILE && ! -L $IROMIHON_SELECTION_FILE ]] || fail "Saved selection is not a regular file."
   selection_bytes=$(wc -c <"$IROMIHON_SELECTION_FILE")
   (( selection_bytes <= IROMIHON_MAX_SELECTION_BYTES )) || fail "Saved selection exceeds $IROMIHON_MAX_SELECTION_BYTES bytes."
   selection_json=$(<"$IROMIHON_SELECTION_FILE")
+  if jq -e 'type == "object" and .schemaVersion == 1 and has("selection") and .selection == null' \
+    <<<"$selection_json" >/dev/null 2>&1; then
+    emit_empty_selection "$output_json" false
+    return
+  fi
   jq -e 'type == "object" and .schemaVersion == 1 and (.url | type == "string") and (.slug | type == "string")' \
     <<<"$selection_json" >/dev/null 2>&1 || fail "Saved selection is malformed."
 
@@ -270,13 +286,26 @@ embedded_remember() {
 }
 
 embedded_forget() {
+  local temporary_file
+
   (( $# == 0 )) || fail "Unknown option: ${1:-}"
 
   lock_sources
-  if [[ -d $IROMIHON_SELECTION_FILE && ! -L $IROMIHON_SELECTION_FILE ]]; then
-    fail "Saved selection path is a directory."
+  [[ ! -L $IROMIHON_SELECTION_DIR ]] || fail "Selection state directory cannot be a symbolic link."
+  [[ ! -e $IROMIHON_SELECTION_DIR || -d $IROMIHON_SELECTION_DIR ]] || fail "Selection state path is not a directory."
+  mkdir -p "$IROMIHON_SELECTION_DIR"
+  chmod 700 "$IROMIHON_SELECTION_DIR"
+  if [[ -e $IROMIHON_SELECTION_FILE && ! -L $IROMIHON_SELECTION_FILE && ! -f $IROMIHON_SELECTION_FILE ]]; then
+    fail "Saved selection path is not a regular file."
   fi
-  rm -f "$IROMIHON_SELECTION_FILE"
+
+  temporary_file=$(mktemp "$IROMIHON_SELECTION_DIR/.selection.XXXXXX")
+  if ! jq -cn '{schemaVersion: 1, selection: null}' >"$temporary_file"; then
+    rm -f "$temporary_file"
+    fail "Could not encode the empty selection."
+  fi
+  chmod 600 "$temporary_file"
+  mv -fT "$temporary_file" "$IROMIHON_SELECTION_FILE"
 }
 
 umask 077
