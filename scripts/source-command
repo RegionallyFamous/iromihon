@@ -11,6 +11,9 @@ IROMIHON_MAX_ARGUMENTS=8
 IROMIHON_MAX_ARGUMENT_CHARS=512
 IROMIHON_LOCK_SECONDS=125
 IROMIHON_APPLY_SECONDS=45
+IROMIHON_MAX_SELECTION_BYTES=2048
+IROMIHON_SELECTION_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/iromihon"
+IROMIHON_SELECTION_FILE="$IROMIHON_SELECTION_DIR/selection.json"
 
 usage() {
   cat >&2 <<'USAGE'
@@ -19,6 +22,9 @@ Usage:
   source-command install <source-id|github-repository-url> <theme-name> [--apply] [--json]
   source-command detach <source-id> <theme-name> [--json]
   source-command update <source-id> [--json]
+  source-command restore [--json]
+  source-command remember <github-repository-url> <theme-name>
+  source-command forget
 USAGE
 }
 
@@ -185,6 +191,94 @@ embedded_update() {
   fi
 }
 
+emit_empty_selection() {
+  local output_json="$1"
+
+  if [[ $output_json == "true" ]]; then
+    jq -cn '{schemaVersion: 1, selection: null}'
+  else
+    printf 'No saved Iromihon selection.\n'
+  fi
+}
+
+embedded_restore() {
+  local output_json=false
+  local selection_json repository_url theme_name selection_bytes
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --json) output_json=true ;;
+      *) fail "Unknown option: $1" ;;
+    esac
+    shift
+  done
+
+  lock_sources
+  if [[ ! -e $IROMIHON_SELECTION_FILE && ! -L $IROMIHON_SELECTION_FILE ]]; then
+    emit_empty_selection "$output_json"
+    return
+  fi
+  [[ -f $IROMIHON_SELECTION_FILE && ! -L $IROMIHON_SELECTION_FILE ]] || fail "Saved selection is not a regular file."
+  selection_bytes=$(wc -c <"$IROMIHON_SELECTION_FILE")
+  (( selection_bytes <= IROMIHON_MAX_SELECTION_BYTES )) || fail "Saved selection exceeds $IROMIHON_MAX_SELECTION_BYTES bytes."
+  selection_json=$(<"$IROMIHON_SELECTION_FILE")
+  jq -e 'type == "object" and .schemaVersion == 1 and (.url | type == "string") and (.slug | type == "string")' \
+    <<<"$selection_json" >/dev/null 2>&1 || fail "Saved selection is malformed."
+
+  repository_url=$(jq -er '.url' <<<"$selection_json") || fail "Saved selection has no repository URL."
+  theme_name=$(jq -er '.slug' <<<"$selection_json") || fail "Saved selection has no theme name."
+  repository_url=$(canonical_repository_url "$repository_url") || fail "Saved selection has an invalid repository URL."
+  theme_repo_valid_slug "$theme_name" || fail "Saved selection has an invalid theme name."
+  theme_repo_prepare_source "$repository_url" false
+  theme_repo_name_exists "$theme_name" || fail "Saved theme '$theme_name' is no longer in this collection."
+
+  if [[ $output_json == "true" ]]; then
+    theme_repo_emit_json "$THEME_REPO_SOURCE_PATH" | jq -c --arg url "$repository_url" --arg slug "$theme_name" \
+      '. + {selection: {url: $url, slug: $slug}}'
+  else
+    printf 'Saved selection: %s#%s\n' "$repository_url" "$theme_name"
+  fi
+}
+
+embedded_remember() {
+  local repository_url="${1:-}"
+  local theme_name="${2:-}"
+  local temporary_file
+
+  [[ -n $repository_url && -n $theme_name ]] || { usage; exit 1; }
+  (( $# == 2 )) || fail "Unknown option: ${3:-}"
+  repository_url=$(canonical_repository_url "$repository_url") || fail "Use a public https://github.com/owner/repository URL."
+  theme_repo_valid_slug "$theme_name" || fail "Invalid theme name."
+
+  lock_sources
+  theme_repo_prepare_source "$repository_url" false
+  theme_repo_name_exists "$theme_name" || fail "Theme '$theme_name' is not provided by this repository."
+  [[ ! -L $IROMIHON_SELECTION_DIR ]] || fail "Selection state directory cannot be a symbolic link."
+  [[ ! -e $IROMIHON_SELECTION_DIR || -d $IROMIHON_SELECTION_DIR ]] || fail "Selection state path is not a directory."
+  mkdir -p "$IROMIHON_SELECTION_DIR"
+  chmod 700 "$IROMIHON_SELECTION_DIR"
+  [[ ! -e $IROMIHON_SELECTION_FILE || ( -f $IROMIHON_SELECTION_FILE && ! -L $IROMIHON_SELECTION_FILE ) ]] || fail "Saved selection is not a regular file."
+
+  temporary_file=$(mktemp "$IROMIHON_SELECTION_DIR/.selection.XXXXXX")
+  if ! jq -cn --arg url "$repository_url" --arg slug "$theme_name" \
+    '{schemaVersion: 1, url: $url, slug: $slug}' >"$temporary_file"; then
+    rm -f "$temporary_file"
+    fail "Could not encode the saved selection."
+  fi
+  chmod 600 "$temporary_file"
+  mv -f "$temporary_file" "$IROMIHON_SELECTION_FILE"
+}
+
+embedded_forget() {
+  (( $# == 0 )) || fail "Unknown option: ${1:-}"
+
+  lock_sources
+  if [[ -d $IROMIHON_SELECTION_FILE && ! -L $IROMIHON_SELECTION_FILE ]]; then
+    fail "Saved selection path is a directory."
+  fi
+  rm -f "$IROMIHON_SELECTION_FILE"
+}
+
 umask 077
 operation="${1:-}"
 [[ -n $operation ]] || { usage; exit 1; }
@@ -196,6 +290,9 @@ case "$operation" in
     if native_command_available "$operation"; then
       exec omarchy theme source "$operation" "$@"
     fi
+    "embedded_$operation" "$@"
+    ;;
+  restore | remember | forget)
     "embedded_$operation" "$@"
     ;;
   *)

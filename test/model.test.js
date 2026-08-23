@@ -59,6 +59,47 @@ test('rejects malformed, oversized, and escaping source data', () => {
   assert.equal(Model.parseSourceJson(JSON.stringify(escaping)).ok, false)
 })
 
+test('restores an exact saved child and recognizes first launch', () => {
+  const firstLaunch = Model.parseRestoreJson(JSON.stringify({ schemaVersion: 1, selection: null }))
+  assert.deepEqual(firstLaunch, { ok: true, found: false, error: '' })
+
+  const restored = Model.parseRestoreJson(sourcePayload({
+    selection: {
+      url: 'https://github.com/RegionallyFamous/omarchy-chaos-themes.git',
+      slug: 'xerox-riot'
+    }
+  }))
+  assert.equal(restored.ok, true)
+  assert.equal(restored.found, true)
+  assert.equal(restored.slug, 'xerox-riot')
+  assert.equal(restored.themes[0].slug, 'xerox-riot')
+})
+
+test('rejects mismatched, absent, and oversized saved selections', () => {
+  const mismatched = sourcePayload({
+    selection: { url: 'https://github.com/another/source.git', slug: 'xerox-riot' }
+  })
+  assert.equal(Model.parseRestoreJson(mismatched).ok, false)
+
+  const absent = sourcePayload({
+    selection: {
+      url: 'https://github.com/RegionallyFamous/omarchy-chaos-themes.git',
+      slug: 'not-in-source'
+    }
+  })
+  assert.equal(Model.parseRestoreJson(absent).ok, false)
+
+  const valid = sourcePayload({
+    selection: {
+      url: 'https://github.com/RegionallyFamous/omarchy-chaos-themes.git',
+      slug: 'xerox-riot'
+    }
+  })
+  const exactBoundary = ' '.repeat(Model.MAX_JSON_CHARS - valid.length) + valid
+  assert.equal(Model.parseRestoreJson(exactBoundary).ok, true)
+  assert.equal(Model.parseRestoreJson(' ' + exactBoundary).ok, false)
+})
+
 test('caps theme records before they enter the QML model', () => {
   const payload = JSON.parse(sourcePayload())
   payload.themes = Array.from({ length: 129 }, (_, index) => ({

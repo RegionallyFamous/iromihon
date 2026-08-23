@@ -29,6 +29,11 @@ Item {
   property string actionOutput: ""
   property string actionError: ""
   property string actionKind: ""
+  property bool restoreAttempted: false
+  property string preferenceDesiredMode: ""
+  property string preferenceDesiredUrl: ""
+  property string preferenceDesiredSlug: ""
+  property string preferenceError: ""
   property bool closeAfterAction: false
   property int requestSerial: 0
 
@@ -57,6 +62,8 @@ Item {
       inspectRepository(repoDraft)
     } else if (themes.length > 0) {
       phase = "browse"
+    } else if (!restoreAttempted) {
+      restoreSelection()
     } else {
       phase = "entry"
     }
@@ -102,7 +109,23 @@ Item {
     phase = "loading"
     requestSerial += 1
     inspectProc.serial = requestSerial
+    inspectProc.kind = "inspect"
     inspectProc.command = [sourceCommand, "inspect", activeRepoUrl, "--json"]
+    inspectProc.running = true
+  }
+
+  function restoreSelection() {
+    if (inspectProc.running || actionProc.running) return
+    restoreAttempted = true
+    inspectOutput = ""
+    inspectError = ""
+    errorText = ""
+    statusText = "Restoring your last selection…"
+    phase = "loading"
+    requestSerial += 1
+    inspectProc.serial = requestSerial
+    inspectProc.kind = "restore"
+    inspectProc.command = [sourceCommand, "restore", "--json"]
     inspectProc.running = true
   }
 
@@ -125,12 +148,88 @@ Item {
     themeIndex = Model.selectedIndex(themes, requestedSlug, 0)
     statusText = ""
     phase = "browse"
+    rememberSelection()
+    Qt.callLater(function() { keySurface.forceActiveFocus() })
+  }
+
+  function finishRestore(serial, exitCode) {
+    if (serial !== requestSerial) return
+    if (exitCode !== 0) {
+      errorText = operationError(inspectError, "Iromihon could not restore the saved selection.")
+      statusText = ""
+      phase = "entry"
+      return
+    }
+
+    var parsed = Model.parseRestoreJson(inspectOutput)
+    if (!parsed.ok) {
+      errorText = parsed.error
+      statusText = ""
+      phase = "entry"
+      return
+    }
+    if (!parsed.found) {
+      statusText = ""
+      phase = "entry"
+      Qt.callLater(function() { urlField.forceActiveFocus() })
+      return
+    }
+
+    sourceInfo = parsed.source
+    themes = parsed.themes
+    requestedSlug = parsed.slug
+    activeRepoUrl = parsed.source.url
+    repoDraft = activeRepoUrl + "#" + requestedSlug
+    themeIndex = Model.selectedIndex(themes, requestedSlug, 0)
+    statusText = ""
+    phase = "browse"
     Qt.callLater(function() { keySurface.forceActiveFocus() })
   }
 
   function moveTheme(direction) {
     if (phase !== "browse" || themes.length < 2) return
     themeIndex = Model.adjacentIndex(themes.length, themeIndex, direction)
+    rememberSelection()
+  }
+
+  function rememberSelection() {
+    var theme = selectedTheme
+    var repositoryUrl = String(sourceInfo && sourceInfo.url ? sourceInfo.url : "")
+    if (!theme || !repositoryUrl) return
+    preferenceDesiredMode = "remember"
+    preferenceDesiredUrl = repositoryUrl
+    preferenceDesiredSlug = String(theme.slug || "")
+    runPreference()
+  }
+
+  function forgetSelection() {
+    preferenceDesiredMode = "forget"
+    preferenceDesiredUrl = ""
+    preferenceDesiredSlug = ""
+    runPreference()
+  }
+
+  function runPreference() {
+    if (preferenceProc.running || !preferenceDesiredMode) return
+    var mode = preferenceDesiredMode
+    var repositoryUrl = preferenceDesiredUrl
+    var themeSlug = preferenceDesiredSlug
+    preferenceDesiredMode = ""
+    preferenceDesiredUrl = ""
+    preferenceDesiredSlug = ""
+    preferenceError = ""
+    preferenceProc.mode = mode
+    if (mode === "forget") preferenceProc.command = [sourceCommand, "forget"]
+    else preferenceProc.command = [sourceCommand, "remember", repositoryUrl, themeSlug]
+    preferenceProc.running = true
+  }
+
+  function finishPreference(mode, exitCode) {
+    if (exitCode !== 0) {
+      errorText = operationError(preferenceError, mode === "forget" ?
+        "Iromihon could not forget the saved collection." : "Iromihon could not save this selection.")
+    }
+    if (preferenceDesiredMode) Qt.callLater(function() { root.runPreference() })
   }
 
   function installSelected(applyTheme) {
@@ -211,6 +310,7 @@ Item {
     themes = parsed.themes
     themeIndex = Model.selectedIndex(themes, selectedSlug, themeIndex)
     phase = "browse"
+    rememberSelection()
     if (actionKind === "detach") statusText = "Removed from Omarchy."
     else if (actionKind === "update") statusText = "Collection refreshed."
     else statusText = closeAfterAction ? "Applied." : "Installed."
@@ -223,15 +323,23 @@ Item {
 
   function resetSource() {
     if (busy) return
+    forgetSelection()
+    restoreAttempted = true
+    sourceInfo = ({})
+    themes = []
+    themeIndex = 0
+    activeRepoUrl = ""
     phase = "entry"
     errorText = ""
     statusText = ""
     requestedSlug = ""
+    repoDraft = ""
   }
 
   Process {
     id: inspectProc
     property int serial: 0
+    property string kind: ""
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.inspectOutput = String(text || "")
@@ -242,7 +350,11 @@ Item {
     }
     onExited: function(exitCode) {
       var completedSerial = serial
-      Qt.callLater(function() { root.finishInspect(completedSerial, exitCode) })
+      var completedKind = kind
+      Qt.callLater(function() {
+        if (completedKind === "restore") root.finishRestore(completedSerial, exitCode)
+        else root.finishInspect(completedSerial, exitCode)
+      })
     }
   }
 
@@ -260,6 +372,20 @@ Item {
     onExited: function(exitCode) {
       var completedSerial = serial
       Qt.callLater(function() { root.finishAction(completedSerial, exitCode) })
+    }
+  }
+
+  Process {
+    id: preferenceProc
+    property string mode: ""
+    stdout: StdioCollector { waitForEnd: true }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.preferenceError = String(text || "")
+    }
+    onExited: function(exitCode) {
+      var completedMode = mode
+      Qt.callLater(function() { root.finishPreference(completedMode, exitCode) })
     }
   }
 
@@ -636,11 +762,20 @@ Item {
 
               Text {
                 Layout.fillWidth: true
-                text: root.errorText || root.statusText || "← → browse · U refresh · G source · I install · D remove · Esc close"
+                text: root.errorText || root.statusText || "← → browse · U refresh · I install · D remove · Esc close"
                 color: root.errorText ? Color.urgent : Color.muted
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 elide: Text.ElideRight
+              }
+
+              Button {
+                text: "Change source"
+                bordered: true
+                onClicked: {
+                  root.resetSource()
+                  Qt.callLater(function() { urlField.forceActiveFocus() })
+                }
               }
 
               Button {

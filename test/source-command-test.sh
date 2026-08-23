@@ -113,6 +113,53 @@ jq -e '.schemaVersion == 1 and (.themes | length) == 4 and all(.themes[]; .insta
 [[ ! -e $HOME/.config/omarchy/themes/xerox-riot ]] || fail "inspect does not install a child"
 pass "inspect clones once and installs no children"
 
+selection_file="$XDG_STATE_HOME/omarchy/iromihon/selection.json"
+empty_restore=$("$COMMAND" restore --json)
+jq -e '.schemaVersion == 1 and .selection == null' <<<"$empty_restore" >/dev/null
+"$COMMAND" remember "$PUBLIC_URL" xerox-riot
+[[ -f $selection_file && ! -L $selection_file ]] || fail "selection is saved as a regular file"
+[[ $(stat -c '%a' "$selection_file") == "600" ]] || fail "selection state is not owner-only"
+restore_json=$("$COMMAND" restore --json)
+jq -e '.selection as $selection | $selection == {url: "https://github.com/RegionallyFamous/omarchy-chaos-themes.git", slug: "xerox-riot"} and any(.themes[]; .slug == $selection.slug)' <<<"$restore_json" >/dev/null
+pass "the exact collection child survives a fresh process"
+
+multibyte_padding=$(printf 'é%.0s' {1..128})
+boundary_json=$(jq -cn --arg url "$PUBLIC_URL" --arg slug xerox-riot --arg padding "$multibyte_padding" \
+  '{schemaVersion: 1, url: $url, slug: $slug, padding: $padding}')
+boundary_bytes=$(printf '%s' "$boundary_json" | wc -c)
+(( boundary_bytes < 2048 )) || fail "selection boundary fixture is unexpectedly large"
+leading_bytes=$((2048 - boundary_bytes))
+head -c "$leading_bytes" /dev/zero | tr '\0' ' ' >"$selection_file"
+printf '%s' "$boundary_json" >>"$selection_file"
+selection_size=$(wc -c <"$selection_file")
+(( selection_size == 2048 )) || fail "selection boundary fixture is not exact"
+"$COMMAND" restore --json >"$TEST_ROOT/selection-exact.json"
+jq -e '.selection.slug == "xerox-riot"' "$TEST_ROOT/selection-exact.json" >/dev/null
+printf 'x' >>"$selection_file"
+if "$COMMAND" restore --json >"$TEST_ROOT/selection-oversized.out" 2>"$TEST_ROOT/selection-oversized.err"; then
+  fail "one byte over the selection ceiling is accepted"
+fi
+[[ ! -s $TEST_ROOT/selection-oversized.out ]] || fail "an oversized selection emits partial JSON"
+pass "selection state enforces its byte ceiling, including multibyte content"
+
+printf '{' >"$selection_file"
+if "$COMMAND" restore --json >"$TEST_ROOT/selection-malformed.out" 2>"$TEST_ROOT/selection-malformed.err"; then
+  fail "malformed selection state is accepted"
+fi
+[[ ! -s $TEST_ROOT/selection-malformed.out ]] || fail "malformed selection state emits partial JSON"
+"$COMMAND" remember "$PUBLIC_URL" xerox-riot
+mv "$selection_file" "$TEST_ROOT/selection-target.json"
+ln -s "$TEST_ROOT/selection-target.json" "$selection_file"
+if "$COMMAND" restore --json >"$TEST_ROOT/selection-symlink.out" 2>"$TEST_ROOT/selection-symlink.err"; then
+  fail "symbolic-link selection state is accepted"
+fi
+[[ ! -s $TEST_ROOT/selection-symlink.out ]] || fail "symbolic-link selection state emits partial JSON"
+"$COMMAND" forget
+[[ -f $TEST_ROOT/selection-target.json ]] || fail "forget followed a symbolic-link selection target"
+empty_restore=$("$COMMAND" restore --json)
+jq -e '.selection == null' <<<"$empty_restore" >/dev/null
+pass "malformed state fails closed and explicit forget clears only Iromihon state"
+
 install_json=$("$COMMAND" install "$source_id" cable-rat-king --json)
 jq -e '.action == {type: "install", theme: "cable-rat-king", applied: false}' <<<"$install_json" >/dev/null
 [[ -L $HOME/.config/omarchy/themes/cable-rat-king ]] || fail "selected child is linked into the native theme directory"

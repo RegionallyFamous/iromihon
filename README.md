@@ -4,7 +4,9 @@
 
 ![Iromihon browsing the Xerox Riot theme](preview.png)
 
-Paste one public GitHub repository, flip through its native child themes, then install and apply exactly the one you want. Iromihon does not replace Omarchy's theme system. Selected children become ordinary entries under `~/.config/omarchy/themes/`, so the stock picker, backgrounds, hooks, templates, and `omarchy theme set` continue to work normally.
+Paste one public GitHub repository, flip through its native child themes, then install and apply exactly the one you want. Iromihon remembers that collection and the exact highlighted child across closing the overlay and restarting the shell. It only returns to source entry when you explicitly choose **Change source**.
+
+Iromihon does not replace Omarchy's theme system. Selected children become ordinary entries under `~/.config/omarchy/themes/`, so the stock picker, backgrounds, hooks, templates, and `omarchy theme set` continue to work normally.
 
 Iromihon owns the visual choice and includes its own bounded source engine for cloning, validation, selective installation, updates, and removal. Omarchy still owns activation: applying a child goes through the normal `omarchy theme set` path.
 
@@ -57,7 +59,7 @@ omarchy-shell shell summon io.github.regionallyfamous.iromihon '{}'
 - `I` installs the selected child without applying it.
 - `D` removes the selected child from Omarchy while retaining the shared collection.
 - `U` refreshes and revalidates the collection atomically.
-- `G` opens another collection.
+- **Change source** or `G` forgets the current selection and opens another collection.
 - `Escape` closes the overlay. Source operations are bounded and finish atomically rather than being abandoned halfway through.
 
 ## Deliberate boundaries
@@ -74,7 +76,9 @@ The first release uses an honest image and palette preview. It does not claim to
 - Validation is an integrity and native-contract check, not a malware guarantee. Themes can contain application configuration overrides; review repositories from authors you trust.
 - Child installation and updates use one owner-only source registry and an installed-child allowlist. New upstream children never enter the stock picker automatically.
 
-Iromihon stores shared clones under `${XDG_DATA_HOME:-~/.local/share}/omarchy/theme-sources/` and its installed-child records under `${XDG_STATE_HOME:-~/.local/state}/omarchy/theme-sources/`. These paths intentionally match the native interface proposed for Omarchy. If compatible `omarchy theme source` commands appear in a future release, Iromihon prefers them automatically; otherwise the embedded engine remains authoritative.
+Iromihon stores shared clones under `${XDG_DATA_HOME:-~/.local/share}/omarchy/theme-sources/`, installed-child records under `${XDG_STATE_HOME:-~/.local/state}/omarchy/theme-sources/`, and the active collection plus child slug in `${XDG_STATE_HOME:-~/.local/state}/omarchy/iromihon/selection.json`. Selection state is owner-only, bounded, and written atomically; it contains no credentials.
+
+The source registry paths intentionally match the native interface proposed for Omarchy. If compatible `omarchy theme source` commands appear in a future release, Iromihon prefers them automatically; otherwise the embedded engine remains authoritative.
 
 ## Remove
 

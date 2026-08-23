@@ -17,6 +17,8 @@ SOURCE_ID="omarchy-chaos-themes-$(printf '%s' "$SOURCE_URL" | sha256sum | cut -c
 SOURCE_ORIGIN="$HOME/.cache/iromihon-acceptance-origin"
 SOURCE_PATH="$HOME/.local/share/omarchy/theme-sources/$SOURCE_ID"
 SOURCE_STATE="$HOME/.local/state/omarchy/theme-sources/$SOURCE_ID"
+SELECTION_DIR="$HOME/.local/state/omarchy/iromihon"
+SELECTION_FILE="$SELECTION_DIR/selection.json"
 THEMES_DIR="$HOME/.config/omarchy/themes"
 LAUNCHER="$HOME/.local/share/applications/$PLUGIN_ID.desktop"
 
@@ -29,7 +31,7 @@ plugin_absent() {
 }
 
 install_test_source() {
-  rm -rf "$SOURCE_ORIGIN" "$SOURCE_PATH" "$SOURCE_STATE"
+  rm -rf "$SOURCE_ORIGIN" "$SOURCE_PATH" "$SOURCE_STATE" "$SELECTION_DIR"
   mkdir -p "$SOURCE_ORIGIN"
   cp -a "$FIXTURE/test/fixtures/source/." "$SOURCE_ORIGIN/"
   git init -q -b main "$SOURCE_ORIGIN"
@@ -52,7 +54,7 @@ cleanup_iromihon() {
   fi
   rm -f "$LAUNCHER"
   rm -f "$THEMES_DIR/xerox-riot" "$THEMES_DIR/cable-rat-king" "$THEMES_DIR/safety-third" "$THEMES_DIR/channel-zero"
-  rm -rf "$SOURCE_PATH" "$SOURCE_STATE" "$SOURCE_ORIGIN"
+  rm -rf "$SOURCE_PATH" "$SOURCE_STATE" "$SOURCE_ORIGIN" "$SELECTION_DIR"
 }
 trap cleanup_iromihon EXIT
 
@@ -132,14 +134,26 @@ screenshot "success-iromihon-01-xerox-riot"
 
 wtype -k Right
 wait_until "right arrow browses one sibling" 15 screen_contains "Cable Rat King"
+wait_until "right arrow saves the exact highlighted child" 15 \
+  bash -c "jq -e '.url == \"$SOURCE_URL\" and .slug == \"cable-rat-king\"' '$SELECTION_FILE'"
 screenshot "success-iromihon-02-cable-rat-king"
+
+wtype -k Escape
+wait_until "Iromihon closes before the persistence restart" 20 layer_absent "$LAYER_NAMESPACE"
+omarchy-restart-shell
+wait_until "the Omarchy shell restarts with a saved selection" 20 omarchy-shell shell ping
+launch_app "gtk-launch '$PLUGIN_ID'"
+wait_until "Iromihon opens from Apps after shell restart" 20 layer_on_screen "$LAYER_NAMESPACE"
+wait_until "the exact uninstalled child is restored without another URL" 20 screen_contains "Cable Rat King"
+wait_until "the source-change button is visible" 15 screen_contains "Change source"
+screenshot "success-iromihon-03-restored-selection"
 
 wtype -k i
 wait_until "install-only keeps Iromihon open" 15 layer_on_screen "$LAYER_NAMESPACE"
 wait_until "install-only creates one native child link" 15 test -L "$THEMES_DIR/cable-rat-king"
 [[ ! -e $THEMES_DIR/xerox-riot ]] || fail "install-only exposed an unselected sibling"
 wait_until "install-only updates the selected child action" 15 screen_contains "Apply theme"
-screenshot "success-iromihon-03-installed-only"
+screenshot "success-iromihon-04-installed-only"
 
 wtype -k Return
 wait_until "apply closes Iromihon" 20 layer_absent "$LAYER_NAMESPACE"
@@ -151,23 +165,32 @@ omarchy-restart-shell
 wait_until "the Omarchy shell restarts" 20 omarchy-shell shell ping
 wait_until "Iromihon remains enabled after shell restart" 20 \
   bash -c "omarchy plugin list --json | jq -e --arg id '$PLUGIN_ID' 'any(.[]; .id == \$id and .enabled)'"
-installed_payload=$(jq -cn '{url: "https://github.com/RegionallyFamous/omarchy-chaos-themes.git#cable-rat-king"}')
-omarchy-shell shell summon "$PLUGIN_ID" "$installed_payload" >/dev/null
+launch_app "gtk-launch '$PLUGIN_ID'"
 wait_until "Iromihon opens after shell restart" 20 layer_on_screen "$LAYER_NAMESPACE"
-wait_until "Iromihon renders the installed child after shell restart" 20 screen_contains "Cable Rat King"
-screenshot "success-iromihon-04-after-shell-restart"
+wait_until "Iromihon restores the installed child after shell restart" 20 screen_contains "Cable Rat King"
+screenshot "success-iromihon-05-after-shell-restart"
 
 wtype -k d
 wait_until "remove detaches only the selected child" 15 test ! -e "$THEMES_DIR/cable-rat-king"
 wait_until "remove keeps Iromihon open" 15 layer_on_screen "$LAYER_NAMESPACE"
 wait_until "remove restores the selected child's install controls" 15 screen_contains "Install only"
-screenshot "success-iromihon-05-detached"
+screenshot "success-iromihon-06-detached"
 
 wtype -k g
 wait_until "another-source control returns to entry" 15 screen_contains "One repository"
-screenshot "success-iromihon-06-source-entry"
+wait_until "another-source control forgets the saved selection" 15 test ! -e "$SELECTION_FILE"
+screenshot "success-iromihon-07-source-entry"
 wtype -k Escape
 wait_until "Escape closes Iromihon" 20 layer_absent "$LAYER_NAMESPACE"
+
+omarchy-restart-shell
+wait_until "the Omarchy shell restarts after forgetting the source" 20 omarchy-shell shell ping
+launch_app "gtk-launch '$PLUGIN_ID'"
+wait_until "Iromihon opens after the reset restart" 20 layer_on_screen "$LAYER_NAMESPACE"
+wait_until "Iromihon keeps the source entry after an explicit reset" 20 screen_contains "One repository"
+screenshot "success-iromihon-08-reset-persists"
+wtype -k Escape
+wait_until "Iromihon closes after reset verification" 20 layer_absent "$LAYER_NAMESPACE"
 
 omarchy plugin remove "$PLUGIN_ID" --yes >/dev/null
 wait_until "Iromihon is removed from disk" 15 test ! -e "$PLUGIN_DIR"

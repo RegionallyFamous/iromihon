@@ -107,7 +107,9 @@ function parseSourceJson(rawText) {
   var sourceId = String(parsed.source.id || "")
   var sourceUrl = boundedString(parsed.source.url, MAX_URL_CHARS)
   var commit = String(parsed.source.commit || "")
-  if (!isValidSourceId(sourceId) || !sourcePath || !/^[a-f0-9]{40}$/.test(commit))
+  var validatedUrl = validateRepositoryUrl(sourceUrl)
+  if (!isValidSourceId(sourceId) || !sourcePath || !/^[a-f0-9]{40}$/.test(commit) ||
+      !validatedUrl.ok || validatedUrl.selector || validatedUrl.baseUrl !== sourceUrl)
     return { ok: false, error: "Theme source identity is invalid." }
 
   var source = { id: sourceId, url: sourceUrl, path: sourcePath, commit: commit }
@@ -119,6 +121,35 @@ function parseSourceJson(rawText) {
   if (themes.length === 0) return { ok: false, error: "This repository contains no valid native themes." }
 
   return { ok: true, source: source, themes: themes, error: "" }
+}
+
+function parseRestoreJson(rawText) {
+  var raw = String(rawText || "")
+  if (!raw || raw.length > MAX_JSON_CHARS) return { ok: false, error: "Saved selection response was empty or too large." }
+
+  var decoded
+  try { decoded = JSON.parse(raw) } catch (e) { return { ok: false, error: "Saved selection returned malformed data." } }
+  if (!decoded || decoded.schemaVersion !== 1 || !("selection" in decoded))
+    return { ok: false, error: "Saved selection response has an unsupported shape." }
+  if (decoded.selection === null) return { ok: true, found: false, error: "" }
+  if (!decoded.selection || typeof decoded.selection !== "object" || !isValidSlug(decoded.selection.slug))
+    return { ok: false, error: "Saved selection identity is invalid." }
+
+  var selectedUrl = validateRepositoryUrl(decoded.selection.url)
+  var source = parseSourceJson(raw)
+  if (!selectedUrl.ok || selectedUrl.selector || !source.ok || source.source.url !== selectedUrl.baseUrl)
+    return { ok: false, error: source.ok ? "Saved selection identity is invalid." : source.error }
+  if (!source.themes.some(function(theme) { return theme.slug === decoded.selection.slug }))
+    return { ok: false, error: "The saved theme is no longer in this collection." }
+
+  return {
+    ok: true,
+    found: true,
+    source: source.source,
+    themes: source.themes,
+    slug: String(decoded.selection.slug),
+    error: ""
+  }
 }
 
 function selectedIndex(themes, requestedSlug, fallbackIndex) {
@@ -168,6 +199,7 @@ if (typeof module !== "undefined") module.exports = {
   fileUrl: fileUrl,
   isValidSlug: isValidSlug,
   palette: palette,
+  parseRestoreJson: parseRestoreJson,
   parseSourceJson: parseSourceJson,
   selectedIndex: selectedIndex,
   statusLabel: statusLabel,
