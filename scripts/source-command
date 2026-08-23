@@ -1,0 +1,205 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/source-lib.sh"
+
+IROMIHON_MAX_ARGUMENTS=8
+IROMIHON_MAX_ARGUMENT_CHARS=512
+IROMIHON_LOCK_SECONDS=125
+IROMIHON_APPLY_SECONDS=45
+
+usage() {
+  cat >&2 <<'USAGE'
+Usage:
+  source-command inspect <github-repository-url> [--json]
+  source-command install <source-id|github-repository-url> <theme-name> [--apply] [--json]
+  source-command detach <source-id> <theme-name> [--json]
+  source-command update <source-id> [--json]
+USAGE
+}
+
+fail() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 1
+}
+
+validate_arguments() {
+  local argument
+
+  (( $# <= IROMIHON_MAX_ARGUMENTS )) || fail "Too many arguments."
+  for argument in "$@"; do
+    (( ${#argument} <= IROMIHON_MAX_ARGUMENT_CHARS )) || fail "An argument exceeds $IROMIHON_MAX_ARGUMENT_CHARS characters."
+  done
+}
+
+canonical_repository_url() {
+  local input="$1"
+  local base path owner repository
+
+  base="${input%%#*}"
+  [[ $base == https://github.com/* ]] || return 1
+  path="${base#https://github.com/}"
+  [[ $path == */* && $path != */*/* ]] || return 1
+  owner="${path%%/*}"
+  repository="${path#*/}"
+  repository="${repository%.git}"
+
+  [[ $owner =~ ^[A-Za-z0-9_.-]+$ && $repository =~ ^[A-Za-z0-9_.-]+$ ]] || return 1
+  [[ $owner != "." && $owner != ".." && $repository != "." && $repository != ".." ]] || return 1
+  printf 'https://github.com/%s/%s.git\n' "$owner" "$repository"
+}
+
+native_command_available() {
+  local operation="$1"
+
+  [[ ${IROMIHON_FORCE_EMBEDDED:-0} != "1" ]] || return 1
+  command -v "omarchy-theme-source-$operation" >/dev/null 2>&1
+}
+
+lock_sources() {
+  mkdir -p "$(dirname "$THEME_REPO_LOCK")"
+  exec 9>"$THEME_REPO_LOCK"
+  flock -w "$IROMIHON_LOCK_SECONDS" 9 || fail "Another theme-source operation did not finish in time."
+}
+
+embedded_inspect() {
+  local repository_url="${1:-}"
+  local output_json=false
+
+  [[ -n $repository_url ]] || { usage; exit 1; }
+  shift
+  while (( $# > 0 )); do
+    case "$1" in
+      --json) output_json=true ;;
+      *) fail "Unknown option: $1" ;;
+    esac
+    shift
+  done
+
+  repository_url=$(canonical_repository_url "$repository_url") || fail "Use a public https://github.com/owner/repository URL."
+  lock_sources
+  theme_repo_prepare_source "$repository_url" false
+  if [[ $output_json == "true" ]]; then
+    theme_repo_emit_json "$THEME_REPO_SOURCE_PATH"
+  else
+    printf 'Source: %s\n' "$THEME_REPO_SOURCE_ID"
+    printf 'Themes: %s\n' "${THEME_REPO_NAMES[*]}"
+  fi
+}
+
+embedded_install() {
+  local source_ref="${1:-}"
+  local theme_name="${2:-}"
+  local apply_theme=false
+  local output_json=false
+
+  [[ -n $source_ref && -n $theme_name ]] || { usage; exit 1; }
+  shift 2
+  while (( $# > 0 )); do
+    case "$1" in
+      --apply) apply_theme=true ;;
+      --json) output_json=true ;;
+      *) fail "Unknown option: $1" ;;
+    esac
+    shift
+  done
+
+  lock_sources
+  if theme_repo_valid_source_id "$source_ref"; then
+    theme_repo_load_source "$source_ref"
+  else
+    source_ref=$(canonical_repository_url "$source_ref") || fail "Use a valid Iromihon source ID or public GitHub repository URL."
+    theme_repo_prepare_source "$source_ref" false
+  fi
+
+  theme_name=$(theme_repo_slugify "$theme_name")
+  theme_repo_install_selection "$THEME_REPO_SOURCE_PATH" "$theme_name"
+  if [[ $apply_theme == "true" ]]; then
+    timeout --signal=TERM --kill-after=3s "${IROMIHON_APPLY_SECONDS}s" omarchy theme set "$theme_name" >/dev/null
+  fi
+
+  if [[ $output_json == "true" ]]; then
+    theme_repo_emit_json "$THEME_REPO_SOURCE_PATH" | jq -c --arg theme "$theme_name" --argjson applied "$apply_theme" \
+      '. + {action: {type: "install", theme: $theme, applied: $applied}}'
+  else
+    printf 'Installed %s from %s\n' "$theme_name" "$THEME_REPO_SOURCE_ID"
+  fi
+}
+
+embedded_detach() {
+  local source_id="${1:-}"
+  local theme_name="${2:-}"
+  local output_json=false
+
+  [[ -n $source_id && -n $theme_name ]] || { usage; exit 1; }
+  shift 2
+  while (( $# > 0 )); do
+    case "$1" in
+      --json) output_json=true ;;
+      *) fail "Unknown option: $1" ;;
+    esac
+    shift
+  done
+
+  theme_repo_valid_source_id "$source_id" || fail "Invalid theme source ID."
+  lock_sources
+  theme_repo_load_source "$source_id"
+  theme_name=$(theme_repo_slugify "$theme_name")
+  theme_repo_detach "$THEME_REPO_SOURCE_PATH" "$theme_name" >/dev/null
+
+  if [[ $output_json == "true" ]]; then
+    theme_repo_emit_json "$THEME_REPO_SOURCE_PATH" | jq -c --arg theme "$theme_name" \
+      '. + {action: {type: "detach", theme: $theme}}'
+  else
+    printf 'Detached %s from %s\n' "$theme_name" "$source_id"
+  fi
+}
+
+embedded_update() {
+  local source_id="${1:-}"
+  local output_json=false
+
+  [[ -n $source_id ]] || { usage; exit 1; }
+  shift
+  while (( $# > 0 )); do
+    case "$1" in
+      --json) output_json=true ;;
+      *) fail "Unknown option: $1" ;;
+    esac
+    shift
+  done
+
+  theme_repo_valid_source_id "$source_id" || fail "Invalid theme source ID."
+  lock_sources
+  theme_repo_load_source "$source_id"
+  theme_repo_refresh_source "$THEME_REPO_SOURCE_PATH"
+
+  if [[ $output_json == "true" ]]; then
+    theme_repo_emit_json "$THEME_REPO_SOURCE_PATH" | jq -c '. + {action: {type: "update"}}'
+  else
+    printf 'Updated %s\n' "$source_id"
+  fi
+}
+
+umask 077
+operation="${1:-}"
+[[ -n $operation ]] || { usage; exit 1; }
+shift
+validate_arguments "$operation" "$@"
+
+case "$operation" in
+  inspect | install | detach | update)
+    if native_command_available "$operation"; then
+      exec omarchy theme source "$operation" "$@"
+    fi
+    "embedded_$operation" "$@"
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac

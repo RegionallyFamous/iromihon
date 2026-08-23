@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.regionallyfamous.iromihon",
+  "name": "Iromihon",
+  "version": "0.2.0",
+  "author": "RegionallyFamous",
+  "license": "MIT",
+  "description": "Browse, validate, and selectively install native Omarchy themes from one collection repository without requiring changes to Omarchy core.",
+  "homepage": "https://github.com/RegionallyFamous/iromihon",
+  "kinds": [
+    "service",
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "overlay": "Iromihon.qml"
+  }
+}

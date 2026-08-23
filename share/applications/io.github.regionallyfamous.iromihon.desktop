@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Iromihon
+Comment=Browse native Omarchy theme collections
+Exec=omarchy-shell shell summon io.github.regionallyfamous.iromihon "{}"
+Icon=preferences-desktop-theme
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=Omarchy;Theme;Appearance;Collection;
+X-Iromihon-Managed=true

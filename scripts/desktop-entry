@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -euo pipefail
+
+PLUGIN_DIR="${1:-}"
+if [[ -z $PLUGIN_DIR || ! -d $PLUGIN_DIR ]]; then
+  echo "Usage: desktop-entry <plugin-dir>" >&2
+  exit 1
+fi
+
+resolved=$(realpath -e "$PLUGIN_DIR" 2>/dev/null || true)
+plugins=$(realpath -e "$HOME/.config/omarchy/plugins" 2>/dev/null || true)
+if [[ -z $resolved || -z $plugins || $resolved != "$plugins"/* ]]; then
+  exit 0
+fi
+
+source_entry="$resolved/share/applications/io.github.regionallyfamous.iromihon.desktop"
+target_entry="$HOME/.local/share/applications/io.github.regionallyfamous.iromihon.desktop"
+[[ -f $source_entry ]] || exit 0
+
+mkdir -p "$HOME/.local/share/applications"
+if [[ -e $target_entry ]] && ! grep -Fxq 'X-Iromihon-Managed=true' "$target_entry"; then
+  exit 0
+fi
+
+temp_entry=$(mktemp "$HOME/.local/share/applications/.iromihon.XXXXXX")
+trap 'rm -f "$temp_entry"' EXIT
+cp "$source_entry" "$temp_entry"
+chmod 644 "$temp_entry"
+mv "$temp_entry" "$target_entry"
