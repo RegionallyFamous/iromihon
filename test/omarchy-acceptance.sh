@@ -34,6 +34,21 @@ install_test_source() {
   rm -rf "$SOURCE_ORIGIN" "$SOURCE_PATH" "$SOURCE_STATE" "$SELECTION_DIR"
   mkdir -p "$SOURCE_ORIGIN"
   cp -a "$FIXTURE/test/fixtures/source/." "$SOURCE_ORIGIN/"
+  mkdir -p "$SOURCE_ORIGIN/themes/cable-rat-king/backgrounds"
+  cp "$SOURCE_ORIGIN/themes/cable-rat-king/preview.jpg" "$SOURCE_ORIGIN/themes/cable-rat-king/backgrounds/1-cable-rat-king.jpg"
+  cp "$SOURCE_ORIGIN/themes/cable-rat-king/preview.jpg" "$SOURCE_ORIGIN/themes/cable-rat-king/backgrounds/2-nest-voltage.jpg"
+  cp "$SOURCE_ORIGIN/themes/cable-rat-king/preview.jpg" "$SOURCE_ORIGIN/themes/cable-rat-king/unlock.png"
+  cp "$SOURCE_ORIGIN/themes/cable-rat-king/preview.jpg" "$SOURCE_ORIGIN/themes/cable-rat-king/preview-unlock.png"
+  printf 'Yaru-cyan-dark\n' >"$SOURCE_ORIGIN/themes/cable-rat-king/icons.theme"
+  printf '00d7c4\n' >"$SOURCE_ORIGIN/themes/cable-rat-king/keyboard.rgb"
+  printf '%s\n' \
+    'background       = "#030807"' \
+    'background-alpha = 0.96' \
+    'text             = "#d7e4db"' \
+    'border           = "#00d7c4"' \
+    'border-alpha     = 1.0' \
+    'border-width     = 2' \
+    >"$SOURCE_ORIGIN/themes/cable-rat-king/shell.popups.toml"
   git init -q -b main "$SOURCE_ORIGIN"
   git -C "$SOURCE_ORIGIN" config user.name IromihonAcceptance
   git -C "$SOURCE_ORIGIN" config user.email iromihon@example.invalid
@@ -123,7 +138,16 @@ wait_until "a fresh install opens the built-in collection" 20 screen_contains "C
 wait_until "the default collection is registered" 20 test -d "$SOURCE_STATE"
 wait_until "the default child is remembered" 20 \
   bash -c "jq -e '.url == \"$SOURCE_URL\" and .slug == \"cable-rat-king\"' '$SELECTION_FILE'"
+wait_until "Iromihon shows native capability badges" 20 screen_contains "2 WALLPAPERS"
+wait_until "Iromihon shows unlock artwork support" 20 screen_contains "UNLOCK"
+wait_until "Iromihon shows the shell capability" 20 screen_contains "SHELL"
 screenshot "success-iromihon-00-default-collection"
+wtype -k bracketright
+sleep 1
+wait_until "the wallpaper carousel keeps the selected theme in place" 15 screen_contains "Cable Rat King"
+screenshot "success-iromihon-00b-wallpaper-carousel"
+wtype -k bracketleft
+sleep 1
 wtype -k Escape
 wait_until "Iromihon closes after the Apps launch" 20 layer_absent "$LAYER_NAMESPACE"
 

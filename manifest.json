@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.regionallyfamous.iromihon",
   "name": "Iromihon",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "author": "RegionallyFamous",
   "license": "MIT",
   "description": "Browse, validate, and selectively install native Omarchy themes from one collection repository without requiring changes to Omarchy core.",

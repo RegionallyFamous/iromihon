@@ -30,6 +30,15 @@ commit_origin() {
 
 mkdir -p "$TEST_ROOT/origin" "$TEST_ROOT/fake-bin"
 cp -a "$PLUGIN_ROOT/test/fixtures/source/." "$TEST_ROOT/origin/"
+mkdir -p "$TEST_ROOT/origin/themes/xerox-riot/backgrounds"
+for index in {01..12}; do
+  cp "$TEST_ROOT/origin/themes/xerox-riot/preview.jpg" "$TEST_ROOT/origin/themes/xerox-riot/backgrounds/$index.jpg"
+done
+cp "$TEST_ROOT/origin/themes/xerox-riot/preview.jpg" "$TEST_ROOT/origin/themes/xerox-riot/unlock.png"
+cp "$TEST_ROOT/origin/themes/xerox-riot/preview.jpg" "$TEST_ROOT/origin/themes/xerox-riot/preview-unlock.png"
+printf 'Yaru-magenta\n' >"$TEST_ROOT/origin/themes/xerox-riot/icons.theme"
+printf 'ff20a6\n' >"$TEST_ROOT/origin/themes/xerox-riot/keyboard.rgb"
+printf 'background = "#12110f"\n' >"$TEST_ROOT/origin/themes/xerox-riot/shell.menu.toml"
 git init -q -b main "$TEST_ROOT/origin"
 git -C "$TEST_ROOT/origin" config user.name IromihonTest
 git -C "$TEST_ROOT/origin" config user.email iromihon@example.invalid
@@ -88,7 +97,26 @@ fi
 exit 2
 OMARCHY_WRAPPER
 
-chmod 755 "$TEST_ROOT/fake-bin/git" "$TEST_ROOT/fake-bin/omarchy"
+cat >"$TEST_ROOT/fake-bin/flock" <<'FLOCK_WRAPPER'
+#!/bin/bash
+exit 0
+FLOCK_WRAPPER
+
+cat >"$TEST_ROOT/fake-bin/setsid" <<'SETSID_WRAPPER'
+#!/bin/bash
+exec python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' "$@"
+SETSID_WRAPPER
+
+cat >"$TEST_ROOT/fake-bin/timeout" <<'TIMEOUT_WRAPPER'
+#!/bin/bash
+while [[ ${1:-} == --* ]]; do
+  shift
+done
+shift
+exec "$@"
+TIMEOUT_WRAPPER
+
+chmod 755 "$TEST_ROOT/fake-bin/git" "$TEST_ROOT/fake-bin/omarchy" "$TEST_ROOT/fake-bin/flock" "$TEST_ROOT/fake-bin/setsid" "$TEST_ROOT/fake-bin/timeout"
 export PATH="$TEST_ROOT/fake-bin:$ORIGINAL_PATH"
 export HOME="$TEST_ROOT/home"
 export XDG_DATA_HOME="$HOME/.local/share"
@@ -108,10 +136,16 @@ pass "only public GitHub repositories enter the engine"
 inspect_json=$("$COMMAND" inspect "$PUBLIC_URL" --json)
 source_id=$(jq -er '.source.id' <<<"$inspect_json")
 source_path=$(jq -er '.source.path' <<<"$inspect_json")
-jq -e '.schemaVersion == 1 and (.themes | length) == 4 and all(.themes[]; .installed == false)' <<<"$inspect_json" >/dev/null
+jq -e '.schemaVersion == 1 and (.themes | length) == 4 and all(.themes[]; .installed == false) and any(.themes[]; .slug == "xerox-riot" and (.wallpapers | length) == 12 and .capabilities == {wallpaperCount: 12, unlock: true, icons: true, keyboard: true, shell: true, shellSurfaceCount: 1})' <<<"$inspect_json" >/dev/null
 [[ -d $source_path/.git ]] || fail "collection is cloned into the source registry"
 [[ ! -e $HOME/.config/omarchy/themes/xerox-riot ]] || fail "inspect does not install a child"
 pass "inspect clones once and installs no children"
+
+cp "$IROMIHON_TEST_ORIGIN/themes/xerox-riot/preview.jpg" "$IROMIHON_TEST_ORIGIN/themes/xerox-riot/backgrounds/13.jpg"
+commit_origin "Exceed the wallpaper display cap"
+wallpaper_cap_json=$("$COMMAND" update "$source_id" --json)
+jq -e 'any(.themes[]; .slug == "xerox-riot" and (.wallpapers | length) == 12 and ([.wallpapers[] | endswith("/13.jpg")] | any) == false and .capabilities.wallpaperCount == 12)' <<<"$wallpaper_cap_json" >/dev/null
+pass "wallpaper discovery accepts the exact cap and drops one-over input"
 
 selection_file="$XDG_STATE_HOME/omarchy/iromihon/selection.json"
 empty_restore=$("$COMMAND" restore --json)

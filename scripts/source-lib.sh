@@ -19,6 +19,8 @@ THEME_REPO_MAX_PREVIEW_BYTES=$((32 * 1024 * 1024))
 THEME_REPO_MAX_PALETTE_BYTES=$((128 * 1024))
 THEME_REPO_MAX_COLOR_CHARS=64
 THEME_REPO_MAX_PATH_CHARS=512
+THEME_REPO_MAX_WALLPAPERS=12
+THEME_REPO_MAX_SHELL_SURFACES=16
 THEME_REPO_CLONE_SECONDS=90
 THEME_REPO_CLONE_FILE_BLOCKS=$((512 * 1024))
 
@@ -672,6 +674,38 @@ theme_repo_find_preview() {
   return 0
 }
 
+theme_repo_wallpapers_json() {
+  local theme_path="$1"
+  local wallpaper count=0
+
+  if [[ ! -d $theme_path/backgrounds ]]; then
+    printf '[]\n'
+    return
+  fi
+
+  while IFS= read -r -d '' wallpaper; do
+    (( count += 1 ))
+    if (( count > THEME_REPO_MAX_WALLPAPERS )); then
+      break
+    fi
+    jq -cn --arg path "$wallpaper" '$path'
+  done < <(find -P "$theme_path/backgrounds" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) -print0 | sort -z) | jq -cs '.'
+}
+
+theme_repo_shell_surface_count() {
+  local theme_path="$1"
+  local shell_file count=0
+
+  while IFS= read -r -d '' shell_file; do
+    (( count += 1 ))
+    if (( count >= THEME_REPO_MAX_SHELL_SURFACES )); then
+      break
+    fi
+  done < <(find -P "$theme_path" -maxdepth 1 -type f \( -name 'shell.toml' -o -name 'shell.*.toml' \) -print0)
+
+  printf '%d\n' "$count"
+}
+
 theme_repo_color() {
   local colors_file="$1"
   local key="$2"
@@ -690,6 +724,7 @@ theme_repo_title() {
 theme_repo_emit_json() {
   local source_path="$1"
   local source_id source_url commit index name relative_path theme_path preview destination installed conflict status colors_file
+  local wallpapers_json wallpaper_count unlock icons keyboard shell shell_surface_count
 
   source_id=$(basename "$source_path")
   source_url=$(git -C "$source_path" config --get remote.origin.url 2>/dev/null || true)
@@ -715,6 +750,17 @@ theme_repo_emit_json() {
         status="conflict"
       fi
       colors_file="$theme_path/colors.toml"
+      wallpapers_json=$(theme_repo_wallpapers_json "$theme_path")
+      wallpaper_count=$(jq -r 'length' <<<"$wallpapers_json")
+      unlock=false
+      icons=false
+      keyboard=false
+      shell=false
+      [[ -f $theme_path/unlock.png && -f $theme_path/preview-unlock.png ]] && unlock=true
+      [[ -f $theme_path/icons.theme ]] && icons=true
+      [[ -f $theme_path/keyboard.rgb ]] && keyboard=true
+      shell_surface_count=$(theme_repo_shell_surface_count "$theme_path")
+      (( shell_surface_count > 0 )) && shell=true
 
       jq -cn \
         --arg slug "$name" \
@@ -733,9 +779,16 @@ theme_repo_emit_json() {
         --arg cyan "$(theme_repo_color "$colors_file" cyan)" \
         --arg blue "$(theme_repo_color "$colors_file" blue)" \
         --arg magenta "$(theme_repo_color "$colors_file" magenta)" \
+        --argjson wallpapers "$wallpapers_json" \
+        --argjson wallpaperCount "$wallpaper_count" \
+        --argjson unlock "$unlock" \
+        --argjson icons "$icons" \
+        --argjson keyboard "$keyboard" \
+        --argjson shell "$shell" \
+        --argjson shellSurfaceCount "$shell_surface_count" \
         --argjson installed "$installed" \
         --argjson conflict "$conflict" \
-        '{slug: $slug, name: $name, relativePath: $relativePath, path: $path, preview: $preview, status: $status, installed: $installed, conflict: $conflict, mode: $mode, colors: {accent: $accent, background: $background, foreground: $foreground, red: $red, yellow: $yellow, green: $green, cyan: $cyan, blue: $blue, magenta: $magenta}}'
+        '{slug: $slug, name: $name, relativePath: $relativePath, path: $path, preview: $preview, wallpapers: $wallpapers, status: $status, installed: $installed, conflict: $conflict, mode: $mode, capabilities: {wallpaperCount: $wallpaperCount, unlock: $unlock, icons: $icons, keyboard: $keyboard, shell: $shell, shellSurfaceCount: $shellSurfaceCount}, colors: {accent: $accent, background: $background, foreground: $foreground, red: $red, yellow: $yellow, green: $green, cyan: $cyan, blue: $blue, magenta: $magenta}}'
     done
   } | jq -cs \
     --arg id "$source_id" \

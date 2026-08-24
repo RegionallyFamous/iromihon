@@ -3,6 +3,8 @@ var MAX_URL_CHARS = 512
 var MAX_PATH_CHARS = 512
 var MAX_NAME_CHARS = 80
 var MAX_THEMES = 128
+var MAX_WALLPAPERS = 12
+var MAX_SHELL_SURFACES = 16
 
 function isValidSlug(value) {
   var slug = String(value || "")
@@ -60,6 +62,12 @@ function safeColor(value) {
   return /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/.test(color) ? color : ""
 }
 
+function boundedInteger(value, max) {
+  var number = Number(value)
+  if (!isFinite(number) || number < 0 || Math.floor(number) !== number) return 0
+  return Math.min(max, number)
+}
+
 function normalizeTheme(raw, sourcePath) {
   if (!raw || !isValidSlug(raw.slug)) return null
   var path = safeAbsolutePath(raw.path)
@@ -67,19 +75,38 @@ function normalizeTheme(raw, sourcePath) {
 
   var preview = safeAbsolutePath(raw.preview)
   if (preview && !pathWithin(preview, path)) preview = ""
+  var wallpapers = []
+  var rawWallpapers = Array.isArray(raw.wallpapers) ? raw.wallpapers : []
+  var wallpaperRoot = path + "/backgrounds"
+  for (var i = 0; i < rawWallpapers.length && wallpapers.length < MAX_WALLPAPERS; i++) {
+    var wallpaper = safeAbsolutePath(rawWallpapers[i])
+    if (wallpaper && pathWithin(wallpaper, wallpaperRoot) && wallpapers.indexOf(wallpaper) < 0)
+      wallpapers.push(wallpaper)
+  }
   var status = String(raw.status || "available")
   if (status !== "available" && status !== "installed" && status !== "conflict") status = "available"
   var colors = raw.colors && typeof raw.colors === "object" ? raw.colors : {}
+  var rawCapabilities = raw.capabilities && typeof raw.capabilities === "object" ? raw.capabilities : {}
+  var shellSurfaceCount = boundedInteger(rawCapabilities.shellSurfaceCount, MAX_SHELL_SURFACES)
 
   return {
     slug: String(raw.slug),
     name: boundedString(raw.name || raw.slug, MAX_NAME_CHARS) || String(raw.slug),
     path: path,
     preview: preview,
+    wallpapers: wallpapers,
     status: status,
     installed: raw.installed === true,
     conflict: raw.conflict === true,
     mode: raw.mode === "light" ? "light" : "dark",
+    capabilities: {
+      wallpaperCount: wallpapers.length,
+      unlock: rawCapabilities.unlock === true,
+      icons: rawCapabilities.icons === true,
+      keyboard: rawCapabilities.keyboard === true,
+      shell: rawCapabilities.shell === true,
+      shellSurfaceCount: shellSurfaceCount
+    },
     colors: {
       accent: safeColor(colors.accent),
       background: safeColor(colors.background),
@@ -191,6 +218,29 @@ function statusLabel(theme) {
   return "NOT INSTALLED"
 }
 
+function capabilityLabels(theme) {
+  if (!theme) return []
+  var capabilities = theme.capabilities || {}
+  var labels = [theme.mode === "light" ? "LIGHT" : "DARK"]
+  var wallpaperCount = Array.isArray(theme.wallpapers) ? theme.wallpapers.length : 0
+  labels.push(wallpaperCount + (wallpaperCount === 1 ? " WALLPAPER" : " WALLPAPERS"))
+  if (capabilities.unlock) labels.push("UNLOCK")
+  if (capabilities.shell) labels.push(capabilities.shellSurfaceCount > 0 ? "SHELL ×" + capabilities.shellSurfaceCount : "SHELL")
+  if (capabilities.icons) labels.push("ICONS")
+  if (capabilities.keyboard) labels.push("KEYBOARD")
+  return labels
+}
+
+function wallpaperPath(theme, index) {
+  if (!theme) return ""
+  var wallpapers = Array.isArray(theme.wallpapers) ? theme.wallpapers : []
+  if (wallpapers.length === 0) return safeAbsolutePath(theme.preview)
+  var current = Number(index)
+  if (!isFinite(current)) current = 0
+  current = Math.max(0, Math.min(wallpapers.length - 1, Math.floor(current)))
+  return wallpapers[current] || wallpapers[0]
+}
+
 function fileUrl(path) {
   var value = safeAbsolutePath(path)
   if (!value) return ""
@@ -199,7 +249,9 @@ function fileUrl(path) {
 
 if (typeof module !== "undefined") module.exports = {
   MAX_JSON_CHARS: MAX_JSON_CHARS,
+  MAX_WALLPAPERS: MAX_WALLPAPERS,
   adjacentIndex: adjacentIndex,
+  capabilityLabels: capabilityLabels,
   fileUrl: fileUrl,
   isValidSlug: isValidSlug,
   palette: palette,
@@ -207,5 +259,6 @@ if (typeof module !== "undefined") module.exports = {
   parseSourceJson: parseSourceJson,
   selectedIndex: selectedIndex,
   statusLabel: statusLabel,
+  wallpaperPath: wallpaperPath,
   validateRepositoryUrl: validateRepositoryUrl
 }

@@ -22,6 +22,7 @@ Item {
   property var sourceInfo: ({})
   property var themes: []
   property int themeIndex: 0
+  property int wallpaperIndex: 0
   property string statusText: ""
   property string errorText: ""
   property string inspectOutput: ""
@@ -40,6 +41,8 @@ Item {
   readonly property bool busy: phase === "loading" || phase === "working"
   readonly property string defaultRepositoryUrl: "https://github.com/RegionallyFamous/iromihon-themes.git"
   readonly property var selectedTheme: themes.length > 0 && themeIndex >= 0 && themeIndex < themes.length ? themes[themeIndex] : null
+  readonly property var selectedWallpapers: selectedTheme && Array.isArray(selectedTheme.wallpapers) ? selectedTheme.wallpapers : []
+  readonly property string selectedWallpaper: Model.wallpaperPath(selectedTheme, wallpaperIndex)
   readonly property string focusedScreenName: Hyprland.focusedMonitor ? String(Hyprland.focusedMonitor.name || "") : ""
   readonly property string pluginDir: {
     var url = String(Qt.resolvedUrl("./manifest.json"))
@@ -49,6 +52,9 @@ Item {
     return slash > 0 ? url.slice(0, slash) : url
   }
   readonly property string sourceCommand: pluginDir + "/scripts/source-command"
+
+  onThemeIndexChanged: wallpaperIndex = 0
+  onThemesChanged: wallpaperIndex = 0
 
   function open(payload) {
     var args = {}
@@ -196,6 +202,11 @@ Item {
     if (phase !== "browse" || themes.length < 2) return
     themeIndex = Model.adjacentIndex(themes.length, themeIndex, direction)
     rememberSelection()
+  }
+
+  function moveWallpaper(direction) {
+    if (phase !== "browse" || selectedWallpapers.length < 2) return
+    wallpaperIndex = Model.adjacentIndex(selectedWallpapers.length, wallpaperIndex, direction)
   }
 
   function rememberSelection() {
@@ -448,6 +459,12 @@ Item {
           } else if (root.phase === "browse" && event.key === Qt.Key_Right) {
             root.moveTheme(1)
             event.accepted = true
+          } else if (root.phase === "browse" && event.key === Qt.Key_BracketLeft) {
+            root.moveWallpaper(-1)
+            event.accepted = true
+          } else if (root.phase === "browse" && event.key === Qt.Key_BracketRight) {
+            root.moveWallpaper(1)
+            event.accepted = true
           } else if (root.phase === "browse" && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
             root.installSelected(true)
             event.accepted = true
@@ -470,8 +487,8 @@ Item {
         BorderSurface {
           id: card
           anchors.centerIn: parent
-          width: Math.min(parent.width - Style.space(40), Style.space(760))
-          height: Math.min(parent.height - Style.space(40), Style.space(460))
+          width: Math.min(parent.width - Style.space(40), Style.space(820))
+          height: Math.min(parent.height - Style.space(40), Style.space(500))
           color: Color.popups.background
           borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, 2)
           radius: Style.cornerRadius
@@ -681,10 +698,50 @@ Item {
 
                   Image {
                     anchors.fill: parent
-                    source: root.selectedTheme ? Model.fileUrl(root.selectedTheme.preview) : ""
+                    source: Model.fileUrl(root.selectedWallpaper)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true
+                  }
+
+                  Rectangle {
+                    visible: root.selectedWallpapers.length > 1
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: Style.space(10)
+                    implicitWidth: wallpaperControls.implicitWidth + Style.space(8)
+                    implicitHeight: wallpaperControls.implicitHeight + Style.space(6)
+                    radius: Style.cornerRadius
+                    color: Qt.rgba(0, 0, 0, 0.72)
+
+                    Row {
+                      id: wallpaperControls
+                      anchors.centerIn: parent
+                      spacing: Style.space(4)
+
+                      Button {
+                        text: "‹"
+                        horizontalPadding: Style.space(5)
+                        verticalPadding: Style.space(1)
+                        onClicked: root.moveWallpaper(-1)
+                      }
+
+                      Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: (root.wallpaperIndex + 1) + " / " + root.selectedWallpapers.length
+                        color: "#ffffff"
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.caption
+                        font.weight: Font.Bold
+                      }
+
+                      Button {
+                        text: "›"
+                        horizontalPadding: Style.space(5)
+                        verticalPadding: Style.space(1)
+                        onClicked: root.moveWallpaper(1)
+                      }
+                    }
                   }
 
                   Rectangle {
@@ -748,6 +805,36 @@ Item {
                         }
                       }
                     }
+
+                    Flow {
+                      Layout.fillWidth: true
+                      Layout.preferredHeight: Style.space(20)
+                      spacing: Style.space(4)
+
+                      Repeater {
+                        model: Model.capabilityLabels(root.selectedTheme)
+
+                        Rectangle {
+                          required property var modelData
+                          implicitWidth: capabilityLabel.implicitWidth + Style.space(10)
+                          implicitHeight: capabilityLabel.implicitHeight + Style.space(4)
+                          radius: Style.cornerRadius
+                          color: Qt.rgba(0, 0, 0, 0.54)
+                          border.width: 1
+                          border.color: Qt.rgba(1, 1, 1, 0.24)
+
+                          Text {
+                            id: capabilityLabel
+                            anchors.centerIn: parent
+                            text: modelData
+                            color: "#ffffff"
+                            font.family: Style.font.family
+                            font.pixelSize: Style.font.caption
+                            font.weight: Font.Bold
+                          }
+                        }
+                      }
+                    }
                   }
                 }
 
@@ -768,7 +855,7 @@ Item {
 
               Text {
                 Layout.fillWidth: true
-                text: root.errorText || root.statusText || "← → browse · U refresh · I install · D remove · Esc close"
+                text: root.errorText || root.statusText || "← → theme · [ ] wallpaper · U refresh · I install · D remove · Esc close"
                 color: root.errorText ? Color.urgent : Color.muted
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption

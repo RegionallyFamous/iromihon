@@ -2,9 +2,9 @@
 
 **Iromihon** (色見本, *color sample*) is a theme collection browser for Omarchy Quattro.
 
-![Iromihon browsing the Xerox Riot theme](preview.png)
+![Iromihon browsing the built-in collection in Omarchy](gallery/default-collection.png)
 
-Open Iromihon and its companion collection is ready to browse. Flip through the native child themes, then install and apply exactly the one you want. Iromihon remembers that collection and the exact highlighted child across closing the overlay and restarting the shell. It only returns to source entry when you explicitly choose **Change source**, where you can paste any other compatible public GitHub repository.
+Open Iromihon and its companion collection is ready to browse. Flip through native child themes and their actual wallpapers, see which ones ship unlock art, icon and keyboard hints, or authored shell surfaces, then install and apply exactly the one you want. Iromihon remembers that collection and the exact highlighted child across closing the overlay and restarting the shell. It only returns to source entry when you explicitly choose **Change source**, where you can paste any other compatible public GitHub repository.
 
 Iromihon does not replace Omarchy's theme system. Selected children become ordinary entries under `~/.config/omarchy/themes/`, so the stock picker, backgrounds, hooks, templates, and `omarchy theme set` continue to work normally.
 
@@ -63,6 +63,7 @@ No setup prompt or core patch is required. Choose **Change source** if you want 
 ## Controls
 
 - `Left` / `Right` browse the current collection.
+- `[` / `]` browse the selected theme's wallpapers.
 - `Enter` installs and applies the selected child.
 - `I` installs the selected child without applying it.
 - `D` removes the selected child from Omarchy while retaining the shared collection.
@@ -70,17 +71,21 @@ No setup prompt or core patch is required. Choose **Change source** if you want 
 - **Change source** or `G` clears the current selection and opens another collection.
 - `Escape` closes the overlay. Source operations are bounded and finish atomically rather than being abandoned halfway through.
 
+The carousel is the child theme's real native `backgrounds/` directory, not a separate catalog preview:
+
+![Iromihon showing the second wallpaper in a native child theme](gallery/wallpaper-carousel.png)
+
 ## Deliberate boundaries
 
 Iromihon is not a scheduler, folder organizer, palette editor, wallpaper generator, or hosted theme store. ThemeBook and other Omarchy tools already serve those workflows. Iromihon stays focused on the missing step before them: browsing one repository and selectively installing a native child.
 
-The first release uses an honest image and palette preview. It does not claim to preview the entire running desktop; a true reversible shell preview needs a stable Omarchy preview API before it can be trusted.
+The browser displays the child's real `backgrounds/` files and derives a fixed capability summary from ordinary native files. It does not execute metadata or claim to preview the entire running desktop; a true reversible shell preview still needs a stable Omarchy preview API before it can be trusted.
 
 ## Security and data
 
 - The built-in `RegionallyFamous/iromihon-themes` collection is contacted on a true first launch. Every replacement source must be an explicit public `https://github.com/owner/repository` URL.
 - Iromihon never receives Git credentials, runs repository files, requests privilege escalation, polls in the background, or contacts a hosted catalog.
-- Its embedded engine rejects links, executable payloads, invalid slugs, oversized sources, palettes and previews, and collisions with themes it does not own.
+- Its embedded engine rejects links, executable payloads, invalid slugs, oversized sources, palettes and previews, and collisions with themes it does not own. Wallpaper enumeration is capped at twelve per child, shell capability counts are capped at sixteen, and the QML model independently checks that every path remains inside that child's native directory.
 - Validation is an integrity and native-contract check, not a malware guarantee. Themes can contain application configuration overrides; review repositories from authors you trust.
 - Child installation and updates use one owner-only source registry and an installed-child allowlist. New upstream children never enter the stock picker automatically.
 

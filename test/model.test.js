@@ -16,10 +16,15 @@ function sourcePayload(overrides = {}) {
       name: 'Xerox Riot',
       path: '/home/test/.local/share/omarchy/theme-sources/iromihon-themes-a1b2c3d4e5f6/themes/xerox-riot',
       preview: '/home/test/.local/share/omarchy/theme-sources/iromihon-themes-a1b2c3d4e5f6/themes/xerox-riot/preview.png',
+      wallpapers: [
+        '/home/test/.local/share/omarchy/theme-sources/iromihon-themes-a1b2c3d4e5f6/themes/xerox-riot/backgrounds/1-primary.webp',
+        '/home/test/.local/share/omarchy/theme-sources/iromihon-themes-a1b2c3d4e5f6/themes/xerox-riot/backgrounds/2-event.webp'
+      ],
       status: 'available',
       installed: false,
       conflict: false,
       mode: 'dark',
+      capabilities: { wallpaperCount: 2, unlock: true, icons: true, keyboard: true, shell: true, shellSurfaceCount: 4 },
       colors: { background: '#12110f', foreground: '#e8dec8', accent: '#ff3366' }
     }],
     ...overrides
@@ -43,6 +48,9 @@ test('parses a bounded source response and preserves safe native paths', () => {
   assert.equal(parsed.ok, true)
   assert.equal(parsed.themes[0].slug, 'xerox-riot')
   assert.equal(parsed.themes[0].colors.accent, '#ff3366')
+  assert.equal(parsed.themes[0].wallpapers.length, 2)
+  assert.equal(parsed.themes[0].capabilities.wallpaperCount, 2)
+  assert.equal(parsed.themes[0].capabilities.shellSurfaceCount, 4)
   assert.equal(Model.fileUrl(parsed.themes[0].preview).startsWith('file:///home/test/'), true)
 })
 
@@ -117,6 +125,27 @@ test('caps theme records before they enter the QML model', () => {
   const parsed = Model.parseSourceJson(JSON.stringify(payload))
   assert.equal(parsed.ok, true)
   assert.equal(parsed.themes.length, 128)
+})
+
+test('bounds wallpaper paths and derives fixed capability labels', () => {
+  const payload = JSON.parse(sourcePayload())
+  const themePath = payload.themes[0].path
+  payload.themes[0].wallpapers = Array.from({ length: Model.MAX_WALLPAPERS + 3 }, (_, index) =>
+    `${themePath}/backgrounds/${String(index + 1).padStart(2, '0')}.webp`)
+  payload.themes[0].wallpapers[1] = '/tmp/escaping.webp'
+  payload.themes[0].wallpapers[2] = `${themePath}/preview.png`
+  payload.themes[0].capabilities.shellSurfaceCount = 999
+
+  const parsed = Model.parseSourceJson(JSON.stringify(payload))
+  assert.equal(parsed.ok, true)
+  assert.equal(parsed.themes[0].wallpapers.length, Model.MAX_WALLPAPERS)
+  assert.equal(parsed.themes[0].wallpapers.includes('/tmp/escaping.webp'), false)
+  assert.equal(parsed.themes[0].capabilities.wallpaperCount, Model.MAX_WALLPAPERS)
+  assert.equal(parsed.themes[0].capabilities.shellSurfaceCount, 16)
+  assert.equal(Model.wallpaperPath(parsed.themes[0], 99), parsed.themes[0].wallpapers.at(-1))
+  assert.deepEqual(Model.capabilityLabels(parsed.themes[0]), [
+    'DARK', '12 WALLPAPERS', 'UNLOCK', 'SHELL ×16', 'ICONS', 'KEYBOARD'
+  ])
 })
 
 test('wraps navigation and selects deep-linked children', () => {
