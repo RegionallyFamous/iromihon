@@ -1,5 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 const Model = require('../Model.js')
 
 function sourcePayload(overrides = {}) {
@@ -166,4 +168,12 @@ test('builds a compact unique palette and honest status labels', () => {
 test('encodes preview paths without turning filename punctuation into URL syntax', () => {
   assert.equal(Model.fileUrl('/tmp/theme/preview #1?.png'), 'file:///tmp/theme/preview%20%231%3F.png')
   assert.equal(Model.fileUrl('relative/preview.png'), '')
+})
+
+test('renders every QML text surface as plain text', () => {
+  const qml = fs.readFileSync(path.join(__dirname, '..', 'Iromihon.qml'), 'utf8')
+  const textBlocks = qml.match(/\bText\s*\{[\s\S]*?\n\s*\}/g) || []
+
+  assert.equal(textBlocks.length, 16)
+  for (const block of textBlocks) assert.match(block, /textFormat:\s*Text\.PlainText/)
 })

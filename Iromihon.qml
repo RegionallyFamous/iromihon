@@ -512,6 +512,7 @@ Item {
                 spacing: 0
                 Text {
                   text: "Iromihon"
+                  textFormat: Text.PlainText
                   color: Color.popups.text
                   font.family: Style.font.family
                   font.pixelSize: Style.font.title
@@ -519,6 +520,7 @@ Item {
                 }
                 Text {
                   text: "色見本  ·  THEME COLLECTION BROWSER"
+                  textFormat: Text.PlainText
                   color: Color.muted
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
@@ -528,6 +530,7 @@ Item {
               Text {
                 visible: root.phase === "browse"
                 text: (root.themeIndex + 1) + " / " + root.themes.length
+                textFormat: Text.PlainText
                 color: Color.muted
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
@@ -547,6 +550,7 @@ Item {
                 Text {
                   Layout.fillWidth: true
                   text: "One repository. Pick exactly one look."
+                  textFormat: Text.PlainText
                   color: Color.popups.text
                   horizontalAlignment: Text.AlignHCenter
                   font.family: Style.font.family
@@ -558,6 +562,7 @@ Item {
                 Text {
                   Layout.fillWidth: true
                   text: "Paste a public GitHub collection. Iromihon reads native themes/<slug>/ directories and leaves Omarchy’s normal picker clean."
+                  textFormat: Text.PlainText
                   color: Color.muted
                   horizontalAlignment: Text.AlignHCenter
                   font.family: Style.font.family
@@ -586,6 +591,7 @@ Item {
                   visible: root.errorText !== ""
                   Layout.fillWidth: true
                   text: root.errorText
+                  textFormat: Text.PlainText
                   color: Color.urgent
                   horizontalAlignment: Text.AlignHCenter
                   font.family: Style.font.family
@@ -608,6 +614,7 @@ Item {
                 Text {
                   Layout.alignment: Qt.AlignHCenter
                   text: "↻"
+                  textFormat: Text.PlainText
                   color: Color.accent
                   font.family: Style.font.family
                   font.pixelSize: Style.font.displayLarge
@@ -616,6 +623,7 @@ Item {
                 Text {
                   Layout.alignment: Qt.AlignHCenter
                   text: root.statusText
+                  textFormat: Text.PlainText
                   color: Color.popups.text
                   font.family: Style.font.family
                   font.pixelSize: Style.font.body
@@ -623,6 +631,7 @@ Item {
                 Text {
                   Layout.alignment: Qt.AlignHCenter
                   text: "The operation is bounded and cannot be cancelled halfway through."
+                  textFormat: Text.PlainText
                   color: Color.muted
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
@@ -642,6 +651,7 @@ Item {
                 Text {
                   Layout.fillWidth: true
                   text: "Collection unavailable"
+                  textFormat: Text.PlainText
                   color: Color.urgent
                   horizontalAlignment: Text.AlignHCenter
                   font.family: Style.font.family
@@ -651,6 +661,7 @@ Item {
                 Text {
                   Layout.fillWidth: true
                   text: root.errorText
+                  textFormat: Text.PlainText
                   color: Color.popups.text
                   horizontalAlignment: Text.AlignHCenter
                   font.family: Style.font.family
@@ -729,6 +740,7 @@ Item {
                       Text {
                         anchors.verticalCenter: parent.verticalCenter
                         text: (root.wallpaperIndex + 1) + " / " + root.selectedWallpapers.length
+                        textFormat: Text.PlainText
                         color: "#ffffff"
                         font.family: Style.font.family
                         font.pixelSize: Style.font.caption
@@ -768,6 +780,7 @@ Item {
                       Text {
                         Layout.fillWidth: true
                         text: root.selectedTheme ? root.selectedTheme.name : ""
+                        textFormat: Text.PlainText
                         color: "#ffffff"
                         font.family: Style.font.family
                         font.pixelSize: Style.font.display
@@ -782,6 +795,7 @@ Item {
                           id: statusLabel
                           anchors.centerIn: parent
                           text: Model.statusLabel(root.selectedTheme)
+                          textFormat: Text.PlainText
                           color: "#ffffff"
                           font.family: Style.font.family
                           font.pixelSize: Style.font.caption
@@ -827,6 +841,7 @@ Item {
                             id: capabilityLabel
                             anchors.centerIn: parent
                             text: modelData
+                            textFormat: Text.PlainText
                             color: "#ffffff"
                             font.family: Style.font.family
                             font.pixelSize: Style.font.caption
@@ -856,6 +871,7 @@ Item {
               Text {
                 Layout.fillWidth: true
                 text: root.errorText || root.statusText || "← → theme · [ ] wallpaper · U refresh · I install · D remove · Esc close"
+                textFormat: Text.PlainText
                 color: root.errorText ? Color.urgent : Color.muted
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
